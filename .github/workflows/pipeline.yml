@@ -25,7 +25,25 @@ jobs:
       
       #- name: "Ejecutar pruebas"
       #  run: npm test || true # "Demoraba mucho" exit code por credenciales externas
-  
+      
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: "Escanear vulnerabilidades"
+        run: npm audit --audit-level=critical || true
+      - name: "Guardar reporte"
+        run: npm audit --json > audit-report.json || true
+      - name: "Subir reporte como artefacto"
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-report
+          path: audit-report.json
+
   docker-push:
     needs: build-and-test
     runs-on: ubuntu-latest
