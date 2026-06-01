@@ -10,6 +10,9 @@ jobs:
   codeql:
 
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write  # necesario para publicar alertas
+      contents: read
     steps:
       - name: "Descargar código"
         uses: actions/checkout@v4
