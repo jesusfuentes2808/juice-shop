@@ -1,4 +1,4 @@
-name: "CodeQL — análisis de seguridad"
+name: "CodeQL — análisis de seguridad - change branch"
 
 on:
   push:

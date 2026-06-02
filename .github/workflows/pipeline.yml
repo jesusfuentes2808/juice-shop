@@ -25,7 +25,7 @@ jobs:
       
       #- name: "Ejecutar pruebas"
       #  run: npm test || true # "Demoraba mucho" exit code por credenciales externas
-      
+
   security:
     runs-on: ubuntu-latest
     steps:
@@ -45,7 +45,7 @@ jobs:
           path: audit-report.json
 
   docker-push:
-    needs: build-and-test
+    needs: [build-and-test, security]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' # Solo ejecutar en main
 
