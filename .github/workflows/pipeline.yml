@@ -61,6 +61,7 @@ jobs:
     with:
       entorno: "Staging"
       estado: ${{ needs.deploy-staging.result }}
+      destinatario: "jesusfuentes2808@gmail.com"
     secrets: inherit
 
 # 5. Despliegue a Producción (Versión estándar)
@@ -82,4 +83,5 @@ jobs:
     with:
       entorno: "Producción"
       estado: ${{ needs.deploy-production.result }}
+      destinatario: "jesusfuentes2808@gmail.com"
     secrets: inherit

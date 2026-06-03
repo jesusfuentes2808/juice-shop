@@ -11,6 +11,10 @@ on:
         description: "El resultado del job anterior (success, failure, etc.)"
         required: true
         type: string
+      destinatario:
+        description: "El destinatario de la notificación"
+        required: true
+        type: string
 
 jobs:
   send-email:
@@ -25,7 +29,7 @@ jobs:
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
           subject: "Despliegue en ${{ inputs.entorno }} - ${{ inputs.estado }}"
-          to: ${{ secrets.MAIL_TO }}
+          to: ${{ inputs.destinatario }}
           from: GitHub Actions DevOps
           body: |
             Hola,
