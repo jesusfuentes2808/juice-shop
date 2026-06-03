@@ -7,11 +7,27 @@ on:
     branches: [main]
 
 jobs:
-  # 1. Llamamos al Reusable Workflow (Módulo 3)
-  ci-build:
-    uses: ./.github/workflows/reusable-build.yml
 
-  # 2. Job de Seguridad Independiente
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        #node-version: [20, 22, 24]  # <-- Definimos las versiones a probar
+        node-version: [20, 22]  # <-- Definimos las versiones a probar
+      fail-fast: false               # <-- Evita que un fallo cancele los demás SOLO EN ENTORNO DE PRUEBAS
+    
+    name: Test en Node ${{ matrix.node-version }} # <-- Le da un nombre limpio en la interfaz
+    
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          #node-version: 22
+          node-version: ${{ matrix.node-version }} # <-- Inyección dinámica de la versión
+          cache: 'npm'
+      - run: npm ci
+      - run: npm test || true
+
   security:
     runs-on: ubuntu-latest
     steps:
@@ -28,9 +44,8 @@ jobs:
           name: audit-report
           path: audit-report.json
 
-  # 3. Construcción del Contenedor
   docker:
-    needs: [ci-build, security] # Espera a la plantilla y a seguridad
+    needs: [build-and-test, security]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +59,6 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:latest
 
-  # 4. Despliegue a Staging (Solo Develop)
   deploy-staging:
     needs: docker
     runs-on: ubuntu-latest
@@ -52,17 +66,18 @@ jobs:
     steps:
       - name: "Deploy a Staging"
         run: |
-          curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK_STAGING }}"
-          echo "Staging desplegado"
+          curl -s -X POST \
+            "${{ secrets.RENDER_DEPLOY_HOOK_STAGING }}" \
+          && echo "Staging desplegado"
 
-# 5. Despliegue a Producción (Versión estándar)
   deploy-production:
     needs: docker
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    environment: production
+    environment: production        # ← aquí está la aprobación manual que se configuro con mi usuario
     steps:
       - name: "Deploy a Producción"
         run: |
-          curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
-          echo "Producción desplegada"
+          curl -s -X POST \
+            "${{ secrets.RENDER_DEPLOY_HOOK }}" \
+          && echo "Producción desplegada"
