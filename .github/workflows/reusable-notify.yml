@@ -20,7 +20,7 @@ jobs:
   send-email:
     runs-on: ubuntu-latest
     steps:
-      - name: "📧 Notificar Estado por Correo Electrónico"
+      - name: "📧 Notificar Estado por Correo Electrónico (ac)"
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
