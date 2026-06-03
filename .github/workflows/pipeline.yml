@@ -54,6 +54,14 @@ jobs:
         run: |
           curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK_STAGING }}"
           echo "Staging desplegado"
+  notify-staging:
+    needs: deploy-staging
+    if: always() && github.ref == 'refs/heads/develop'
+    uses: ./.github/workflows/reusable-notify.yml
+    with:
+      entorno: "Staging"
+      estado: ${{ needs.deploy-staging.result }}
+    secrets: inherit
 
 # 5. Despliegue a Producción (Versión estándar)
   deploy-production:
@@ -66,3 +74,12 @@ jobs:
         run: |
           curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
           echo "Producción desplegada"
+  
+  notify-production:
+    needs: deploy-production
+    if: always() && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/reusable-notify.yml
+    with:
+      entorno: "Producción"
+      estado: ${{ needs.deploy-production.result }}
+    secrets: inherit

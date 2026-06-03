@@ -1,0 +1,40 @@
+name: "Plantilla: Notificación por Correo"
+
+on:
+  workflow_call:
+    inputs:
+      entorno:
+        description: "El entorno desplegado (Staging o Producción)"
+        required: true
+        type: string
+      estado:
+        description: "El resultado del job anterior (success, failure, etc.)"
+        required: true
+        type: string
+
+jobs:
+  send-email:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "📧 Notificar Estado por Correo Electrónico"
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "Despliegue en ${{ inputs.entorno }} - ${{ inputs.estado }}"
+          to: ${{ secrets.MAIL_TO }}
+          from: GitHub Actions DevOps
+          body: |
+            Hola,
+            
+            El pipeline de despliegue en ${{ inputs.entorno }} ha finalizado.
+            
+            🔹 Estado Final: ${{ inputs.estado }}
+            🔹 Repositorio: ${{ github.repository }}
+            🔹 Rama: ${{ github.ref_name }}
+            
+            Haz clic en el siguiente enlace para ver el log completo de esta ejecución:
+            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
