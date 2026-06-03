@@ -10,11 +10,19 @@ jobs:
 
   build-and-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22, 24]  # <-- Definimos las versiones a probar
+      fail-fast: false               # <-- Evita que un fallo cancele los demás
+    
+    name: Test en Node ${{ matrix.node-version }} # <-- Le da un nombre limpio en la interfaz
+    
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          #node-version: 22
+          node-version: ${{ matrix.node-version }} # <-- Inyección dinámica de la versión
           cache: 'npm'
       - run: npm ci
       - run: npm test || true
