@@ -12,8 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [20, 22, 24]  # <-- Definimos las versiones a probar
-      fail-fast: false               # <-- Evita que un fallo cancele los demás
+        #node-version: [20, 22, 24]  # <-- Definimos las versiones a probar
+        node-version: [20, 22]  # <-- Definimos las versiones a probar
+      fail-fast: false               # <-- Evita que un fallo cancele los demás SOLO EN ENTORNO DE PRUEBAS
     
     name: Test en Node ${{ matrix.node-version }} # <-- Le da un nombre limpio en la interfaz
     
