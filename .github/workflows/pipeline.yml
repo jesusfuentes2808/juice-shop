@@ -82,7 +82,7 @@ jobs:
       - name: "3. Health Check (Verificar que la web cargue)"
         run: |
           # REEMPLAZA con la URL real de tu aplicación en Render
-          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" https://juice-shop-m70x.onrender.com)
+          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" https://juice-shop-m70xss.onrender.com)
           
           if [ "$HTTP_STATUS" -ne 200 ]; then
             echo "🔴 Error crítico: La web respondió con estado $HTTP_STATUS"
