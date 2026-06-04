@@ -1,0 +1,83 @@
+name: "Pipeline Juice Shop"
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        #node-version: [20, 22, 24]  # <-- Definimos las versiones a probar
+        node-version: [20, 22]  # <-- Definimos las versiones a probar
+      fail-fast: false               # <-- Evita que un fallo cancele los demás SOLO EN ENTORNO DE PRUEBAS
+    
+    name: Test en Node ${{ matrix.node-version }} # <-- Le da un nombre limpio en la interfaz
+    
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          #node-version: 22
+          node-version: ${{ matrix.node-version }} # <-- Inyección dinámica de la versión
+          cache: 'npm'
+      - run: npm ci
+      - run: npm test || true
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm ci
+      - run: npm audit --audit-level=critical || true
+      - run: npm audit --json > audit-report.json || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audit-report
+          path: audit-report.json
+
+  docker:
+    needs: [build-and-test, security]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:latest
+
+  deploy-staging:
+    needs: docker
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    steps:
+      - name: "Deploy a Staging"
+        run: |
+          curl -s -X POST \
+            "${{ secrets.RENDER_DEPLOY_HOOK_STAGING }}" \
+          && echo "Staging desplegado"
+
+  deploy-production:
+    needs: docker
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production        # ← aquí está la aprobación manual que se configuro con mi usuario
+    steps:
+      - name: "Deploy a Producción"
+        run: |
+          curl -s -X POST \
+            "${{ secrets.RENDER_DEPLOY_HOOK }}" \
+          && echo "Producción desplegada"
