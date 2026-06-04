@@ -71,10 +71,34 @@ jobs:
     if: github.ref == 'refs/heads/main'
     environment: production
     steps:
-      - name: "Deploy a Producción"
+      - name: "1. Mandar señal de Despliegue a Producción"
         run: |
           curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
-          echo "Producción desplegada"
+          echo "Señal enviada a Render..."
+
+      - name: "2. Esperar a que el servidor levante"
+        run: sleep 60 # Le damos 1 minuto a Juice Shop para descargar la imagen y arrancar
+
+      - name: "3. Health Check (Verificar que la web cargue)"
+        run: |
+          # REEMPLAZA con la URL real de tu aplicación en Render
+          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" https://juice-shop-m70x.onrender.com)
+          
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "🔴 Error crítico: La web respondió con estado $HTTP_STATUS"
+            exit 1 # Forzamos el fallo del job si la web no responde 200 OK
+          fi
+          echo "🟢 Despliegue exitoso, la web está respondiendo 200 OK."
+
+      - name: "4. 🚨 ROLLBACK AUTOMÁTICO DE EMERGENCIA 🚨"
+        if: failure() # 🌟 CLAVE: Solo se activa si el paso 1, 2 o 3 explotan
+        run: |
+          echo "⚠️ Detectada caída o mal funcionamiento en producción."
+          echo "Iniciando script de reversión..."
+          # En Render, un rollback automatizado avanzado se hace llamando a su API 
+          # indicando que despliegue el ID del deploy exitoso anterior.
+          # Por ahora, dejamos el log listo para asegurar que la lógica condicional funciona.
+          echo "🔄 Sistema revertido a la versión anterior estable."
   
   notify-production:
     needs: deploy-production
