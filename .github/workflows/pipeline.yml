@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+# Autorizamos al bot a escribir en el repositorio
+permissions:
+  contents: write
+
 jobs:
   # 1. Llamamos al Reusable Workflow (Módulo 3)
   ci-build:
@@ -28,25 +32,69 @@ jobs:
           name: audit-report
           path: audit-report.json
 
-  # 3. Construcción del Contenedor
-  docker:
-    needs: [ci-build, security] # Espera a la plantilla y a seguridad
+ # ==========================================
+  # 3A. CONSTRUCCIÓN (Solo para Staging)
+  # ==========================================
+  docker-build:
+    needs: [ci-build, security]
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' # El candado de Develop
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+          
+      - name: Obtener SHA corto para historial
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        
+      - name: Construir y Subir imagen de Staging
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:latest
+          # Etiquetamos como staging y guardamos el SHA histórico
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:staging
+            ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:${{ steps.vars.outputs.sha_short }}
+
+  # ==========================================
+  # 3B. PROMOCIÓN DE IMAGEN (Solo para Producción)
+  # ==========================================
+  docker-promote:
+    needs: [ci-build, security]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' # El candado de Producción
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          
+      - name: Obtener SHA corto de Producción
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        
+      - name: Promover imagen sin recompilar
+        run: |
+          # 1. Descargamos la caja fuerte que QA aprobó en Staging
+          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:staging
+          
+          # 2. Le pegamos las etiquetas oficiales de Producción
+          docker tag ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:staging ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:latest
+          docker tag ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:staging ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:${{ steps.vars.outputs.sha_short }}
+          
+          # 3. Subimos las nuevas etiquetas a DockerHub
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:${{ steps.vars.outputs.sha_short }}
 
   # 4. Despliegue a Staging (Solo Develop)
   deploy-staging:
-    needs: docker
+    needs: docker-build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/develop'
     steps:
@@ -66,11 +114,17 @@ jobs:
 
 # 5. Despliegue a Producción (Versión estándar)
   deploy-production:
-    needs: docker
+    needs: docker-promote
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     environment: production
     steps:
+      # 👇 FALTA ESTA LÍNEA 👇
+      - name: "0. Descargar código para posibles rollbacks"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 🌟 Importante: descarga todo el historial para poder hacer revert
+          
       - name: "1. Mandar señal de Despliegue a Producción"
         run: |
           curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
@@ -82,7 +136,7 @@ jobs:
       - name: "3. Health Check (Verificar que la web cargue)"
         run: |
           # REEMPLAZA con la URL real de tu aplicación en Render
-          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" https://juice-shop-m70xss.onrender.com)
+          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" https://juice-shop-m70x.onrender.com)
           
           if [ "$HTTP_STATUS" -ne 200 ]; then
             echo "🔴 Error crítico: La web respondió con estado $HTTP_STATUS"
@@ -90,15 +144,35 @@ jobs:
           fi
           echo "🟢 Despliegue exitoso, la web está respondiendo 200 OK."
 
-      - name: "4. 🚨 ROLLBACK AUTOMÁTICO DE EMERGENCIA 🚨"
-        if: failure() # 🌟 CLAVE: Solo se activa si el paso 1, 2 o 3 explotan
+      # - name: "4. 🚨 ROLLBACK AUTOMÁTICO DE EMERGENCIA 🚨"
+      #   if: failure() # 🌟 CLAVE: Solo se activa si el paso 1, 2 o 3 explotan
+      #   run: |
+      #     echo "⚠️ Detectada caída o mal funcionamiento en producción."
+      #     echo "Iniciando script de reversión..."
+      #     # En Render, un rollback automatizado avanzado se hace llamando a su API 
+      #     # indicando que despliegue el ID del deploy exitoso anterior.
+      #     # Por ahora, dejamos el log listo para asegurar que la lógica condicional funciona.
+      #     echo "🔄 Sistema revertido a la versión anterior estable."
+
+      - name: "4. 🚨 ROLL-FORWARD AUTOMÁTICO GITOPS 🚨"
+        if: failure()
         run: |
-          echo "⚠️ Detectada caída o mal funcionamiento en producción."
-          echo "Iniciando script de reversión..."
-          # En Render, un rollback automatizado avanzado se hace llamando a su API 
-          # indicando que despliegue el ID del deploy exitoso anterior.
-          # Por ahora, dejamos el log listo para asegurar que la lógica condicional funciona.
-          echo "🔄 Sistema revertido a la versión anterior estable."
+          echo "⚠️ Caída detectada. Iniciando protocolo GitOps Roll-Forward..."
+          
+          # 1. Configurar la identidad del bot
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 2. Deshacer el último commit (el que causó el error)
+          # GITHUB_SHA es una variable nativa que contiene el ID del commit actual
+          echo "Revertiendo el commit problemático: $GITHUB_SHA"
+          git revert --no-edit $GITHUB_SHA
+          
+          # 3. Empujar la solución de vuelta a la rama main
+          echo "Empujando el parche a producción..."
+          git push origin HEAD:main
+          
+          echo "✅ Parche enviado. Un nuevo pipeline arrancará automáticamente con el código restaurado."
   
   notify-production:
     needs: deploy-production
