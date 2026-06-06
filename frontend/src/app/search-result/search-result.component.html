@@ -7,11 +7,11 @@
   <div class="heading mat-elevation-z6 mat-headline-small">
     @if (searchValue) {
       <div>
-        <span>{{ "TITLE_SEARCH_RESULTS" | translate }} - </span>
+        <span>NEW {{ "TITLE_SEARCH_RESULTS" | translate }} - </span>
         <span id="searchValue" [innerHTML]="searchValue"></span>
       </div>
     } @else {
-      <div>{{ "TITLE_ALL_PRODUCTS" | translate }}</div>
+      <div>NEW {{ "TITLE_ALL_PRODUCTS" | translate }}</div>
     }
     <div id="search-result-heading"></div>
   </div>

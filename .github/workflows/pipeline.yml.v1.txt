@@ -32,69 +32,25 @@ jobs:
           name: audit-report
           path: audit-report.json
 
- # ==========================================
-  # 3A. CONSTRUCCIÓN (Solo para Staging)
-  # ==========================================
-  docker-build:
-    needs: [ci-build, security]
+  # 3. Construcción del Contenedor
+  docker:
+    needs: [ci-build, security] # Espera a la plantilla y a seguridad
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop' # El candado de Develop
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          
-      - name: Obtener SHA corto para historial
-        id: vars
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-        
-      - name: Construir y Subir imagen de Staging
-        uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          # Etiquetamos como staging y guardamos el SHA histórico
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:staging
-            ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:${{ steps.vars.outputs.sha_short }}
-
-  # ==========================================
-  # 3B. PROMOCIÓN DE IMAGEN (Solo para Producción)
-  # ==========================================
-  docker-promote:
-    needs: [ci-build, security]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' # El candado de Producción
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-          
-      - name: Obtener SHA corto de Producción
-        id: vars
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-        
-      - name: Promover imagen sin recompilar
-        run: |
-          # 1. Descargamos la caja fuerte que QA aprobó en Staging
-          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:staging
-          
-          # 2. Le pegamos las etiquetas oficiales de Producción
-          docker tag ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:staging ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:latest
-          docker tag ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:staging ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:${{ steps.vars.outputs.sha_short }}
-          
-          # 3. Subimos las nuevas etiquetas a DockerHub
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:latest
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:${{ steps.vars.outputs.sha_short }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/juice-shop:latest
 
   # 4. Despliegue a Staging (Solo Develop)
   deploy-staging:
-    needs: docker-build
+    needs: docker
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/develop'
     steps:
@@ -114,17 +70,11 @@ jobs:
 
 # 5. Despliegue a Producción (Versión estándar)
   deploy-production:
-    needs: docker-promote
+    needs: docker
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     environment: production
     steps:
-      # 👇 FALTA ESTA LÍNEA 👇
-      - name: "0. Descargar código para posibles rollbacks"
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # 🌟 Importante: descarga todo el historial para poder hacer revert
-          
       - name: "1. Mandar señal de Despliegue a Producción"
         run: |
           curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
@@ -136,7 +86,7 @@ jobs:
       - name: "3. Health Check (Verificar que la web cargue)"
         run: |
           # REEMPLAZA con la URL real de tu aplicación en Render
-          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" https://juice-shop-m70x.onrender.com)
+          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" https://juice-shop-m70xss.onrender.com)
           
           if [ "$HTTP_STATUS" -ne 200 ]; then
             echo "🔴 Error crítico: La web respondió con estado $HTTP_STATUS"
